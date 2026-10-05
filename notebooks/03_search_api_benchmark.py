@@ -29,15 +29,31 @@ import httpx
 # này khởi động uvicorn ở background subprocess và đợi `/healthz` trả ready.
 
 # %%
+import os
+import socket
+import sys
+
+
+def _port_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) != 0
+
+
 ROOT = Path(_setup.__file__).resolve().parent.parent
+# Port 8000 có thể bị service khác chiếm (vd. container Docker) → tự chọn cổng trống.
+PORT = int(os.environ.get("LAB19_API_PORT", 0)) or next(p for p in range(8000, 8020) if _port_free(p))
 proc = subprocess.Popen(
-    ["uvicorn", "app.main:app", "--port", "8000", "--log-level", "warning"],
+    [sys.executable, "-m", "uvicorn", "app.main:app", "--port", str(PORT), "--log-level", "warning"],
     cwd=str(ROOT),
 )
 
-# Đợi server up + warm (Searcher.from_corpus loads embeddings + indexes 1000 docs)
-URL = "http://localhost:8000"
-for _ in range(60):
+# Đợi server up + warm (Searcher.from_corpus loads embeddings + indexes 1000 docs).
+# Laptop CPU yếu có thể mất > 60 s để embed 1000 docs → chờ tối đa 180 s.
+# Dùng 127.0.0.1 thay vì "localhost": trên Windows, localhost thử IPv6 ::1 trước
+# (uvicorn chỉ bind IPv4) → mỗi request mất thêm ~2 s ở client.
+URL = f"http://127.0.0.1:{PORT}"
+print(f"API on {URL}")
+for _ in range(180):
     try:
         r = httpx.get(f"{URL}/healthz", timeout=2.0)
         if r.status_code == 200 and r.json().get("ready"):
@@ -46,7 +62,8 @@ for _ in range(60):
         pass
     time.sleep(1)
 else:
-    raise RuntimeError("API didn't become ready within 60s")
+    proc.terminate()
+    raise RuntimeError("API didn't become ready within 180s")
 
 print(httpx.get(f"{URL}/healthz").json())
 

@@ -95,6 +95,18 @@ if res.stderr:
     print(res.stderr)
 assert res.returncode == 0, f"feast apply failed: {res.stderr}"
 
+# %%
+# Xác nhận cả 3 feature views đã được đăng ký trong registry
+res = subprocess.run(
+    ["feast", "feature-views", "list"],
+    cwd=str(FEAST_DIR),
+    capture_output=True, text=True, check=False,
+)
+print(res.stdout)
+assert res.returncode == 0, f"feature-views list failed: {res.stderr}"
+for fv in ("user_profile_features", "item_popularity_features", "query_velocity_features"):
+    assert fv in res.stdout, f"missing feature view {fv}"
+
 # %% [markdown]
 # ## 3. `feast materialize-incremental` — load offline → online
 #
@@ -183,19 +195,36 @@ else:
 
 # %%
 import pandas as pd
+
+PIT_FEATURES = [
+    "user_profile_features:reading_speed_wpm",
+    "user_profile_features:topic_affinity",
+]
+# Profile của u_{i} được ghi lúc NOW - i giờ (xem make_user_profile), nên mỗi
+# event dưới đây xảy ra SAU khi feature tương ứng tồn tại → 3 dòng đều hợp lệ.
 entity_df = pd.DataFrame({
     "user_id": ["u_001", "u_002", "u_003"],
-    "event_timestamp": [NOW - timedelta(hours=2), NOW - timedelta(hours=1), NOW],
+    "event_timestamp": [NOW, NOW - timedelta(hours=1), NOW - timedelta(hours=2)],
 })
 
-historical = fs.get_historical_features(
-    entity_df=entity_df,
-    features=[
-        "user_profile_features:reading_speed_wpm",
-        "user_profile_features:topic_affinity",
-    ],
-).to_df()
+historical = fs.get_historical_features(entity_df=entity_df, features=PIT_FEATURES).to_df()
 print(historical)
+print(f"\nPIT join: {len(historical)} rows × {len(PIT_FEATURES)} features")
+
+# %% [markdown]
+# ### PIT join chặn rò rỉ tương lai
+#
+# Hỏi feature của `u_001` tại `NOW - 2h`, trong khi profile của `u_001` chỉ được
+# ghi lúc `NOW - 1h` (tức là *tương lai* so với event). Join "latest" ngây thơ sẽ
+# gắn giá trị đó vào event → leakage. PIT join thì không trả giá trị nào.
+
+# %%
+leak_probe = pd.DataFrame({
+    "user_id": ["u_001"],
+    "event_timestamp": [NOW - timedelta(hours=2)],
+})
+probe = fs.get_historical_features(entity_df=leak_probe, features=PIT_FEATURES).to_df()
+print(probe if len(probe) else "(empty) — không có feature nào tồn tại trước event → PIT không lấy giá trị tương lai")
 
 # %% [markdown]
 # ## Deliverable evidence

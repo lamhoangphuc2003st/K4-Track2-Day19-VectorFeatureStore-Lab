@@ -116,6 +116,21 @@ for th in (0.60, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95):
 # > hằng số để copy. Phân bố query của bạn quyết định con số cuối cùng.
 
 # %% [markdown]
+# ### Lựa chọn ngưỡng của tôi: **0,85**
+#
+# * Ở 0,85 bảng sweep cho **tiết kiệm 100% / trả lời sai 0%** — điểm thấp nhất mà
+#   tỉ lệ sai về 0, nên giữ được toàn bộ phần tiết kiệm.
+# * **Vì sao 0,75 chưa đủ:** corpus này gồm câu tiếng Việt kỹ thuật rất giống nhau
+#   về khuôn ("cách … chi phí …", "làm sao … hạ tầng …"); với `bge-small-en`
+#   (English-trained) các câu khác nghĩa vẫn có cosine 0,75–0,80. Ở 0,75 có **36%**
+#   probe âm bị trả nhầm câu trả lời của câu khác — với cache, một false hit tệ hơn
+#   nhiều một miss (miss chỉ tốn thêm một LLM call; false hit trả lời sai một cách
+#   tự tin).
+# * 0,80 vẫn còn 5% sai; 0,90 bắt đầu mất tiết kiệm (96%); 0,95 mất gần nửa (53%).
+#   Vì chi phí bất đối xứng, tôi chọn 0,85 thay vì 0,80, và sẽ đo lại khi đổi
+#   embedding model (bge-m3 sẽ dịch toàn bộ phân bố điểm).
+
+# %% [markdown]
 # ## 3. TTL: câu trả lời cũ không tự biết mình cũ
 #
 # `SemanticCache` dùng **đồng hồ ảo** (`advance()`) nên ta test được TTL mà không

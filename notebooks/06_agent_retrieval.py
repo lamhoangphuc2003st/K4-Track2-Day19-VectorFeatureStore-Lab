@@ -123,6 +123,27 @@ print(f"\nΔ recall vs single-shot:  tách câu {split - base:+.3f}   tách + fi
 # NB5 lặp lại ở tầng agent: **filter không miễn phí, phải đo chứ đừng đoán.**
 
 # %% [markdown]
+# ### Nhận xét từ lần chạy của tôi (cùng ngân sách 16 doc)
+#
+# | strategy | recall | balance |
+# |---|---:|---:|
+# | single-shot | 0.53 | 0.08 |
+# | agentic (no filter) | **0.91** | **0.93** |
+# | agentic (+filter) | 0.82 | 0.76 |
+#
+# * Agentic thắng single-shot ở **cả** recall (+0.38) lẫn balance (0.08 → 0.93): một
+#   embedding duy nhất cho câu hỏi ghép bị kéo về một vế, nên 16 slot bị một topic
+#   chiếm gần hết.
+# * **Vì sao `+filter` thấp hơn `no filter`?** Topic được *đoán* bằng keyword. Khi
+#   đoán sai, hoặc khi một phần gold doc của một vế nằm ở cụm topic lân cận,
+#   filter cứng loại hẳn chúng khỏi
+#   không gian tìm kiếm — đây là lỗi *hard negative* không thể cứu bằng rerank.
+#   Không filter thì vector search vẫn xếp chúng lên nhờ ngữ nghĩa. Filter cũng
+#   không rẻ hơn ở đây (cùng 2.3 call, latency còn cao hơn do filtered search).
+# * Bài học: chỉ dùng filter khi nó là **ràng buộc thật** (tenant, quyền truy cập,
+#   ngày), không dùng filter *suy đoán* để thay cho ranking.
+
+# %% [markdown]
 # ## 4. Reflection: filter tồi còn tệ hơn không filter
 #
 # `Agent` thử lại **một lần** với filter được nới ra khi một call trả về quá ít
